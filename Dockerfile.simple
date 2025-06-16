@@ -1,0 +1,26 @@
+# Simple Dockerfile for development/testing
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package.json
+COPY package.json ./
+
+# Install ALL dependencies (including dev) to avoid conflicts
+RUN npm install --legacy-peer-deps
+
+# Copy all source code
+COPY . .
+
+# Build the app
+RUN npm run build
+
+# Expose port 3023
+EXPOSE 3023
+
+# Set environment variables
+ENV NEXT_PUBLIC_OPENWEATHER_API_KEY=4c16ffa8df277ffbc8eb902919682541
+ENV PORT=3023
+
+# Start the app
+CMD ["npm", "start"]

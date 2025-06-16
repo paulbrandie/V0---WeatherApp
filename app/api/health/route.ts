@@ -10,6 +10,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       cache: cacheStatus,
       uptime: process.uptime(),
+      port: process.env.PORT || 3023,
     })
   } catch (error) {
     return NextResponse.json(
@@ -17,6 +18,7 @@ export async function GET() {
         status: "unhealthy",
         error: error instanceof Error ? error.message : "Unknown error",
         timestamp: new Date().toISOString(),
+        port: process.env.PORT || 3023,
       },
       { status: 500 },
     )
