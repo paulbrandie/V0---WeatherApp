@@ -8,6 +8,17 @@ docker stop weather-app-container 2>/dev/null || true
 docker rm weather-app-container 2>/dev/null || true
 docker rmi weather-app-simple 2>/dev/null || true
 
+# Verify UI components exist locally
+echo "🔍 Checking UI components..."
+if [ -d "components/ui" ]; then
+    echo "✅ UI components directory found"
+    ls -la components/ui/
+else
+    echo "❌ UI components directory missing!"
+    echo "Creating components/ui directory..."
+    mkdir -p components/ui
+fi
+
 # Build using the simple Dockerfile
 echo "🔨 Building Docker image..."
 docker build -f Dockerfile.simple -t weather-app-simple . --no-cache
@@ -59,5 +70,6 @@ else
     echo "1. Check Docker is running: docker --version"
     echo "2. Free up space: docker system prune -f"
     echo "3. Check build logs above for specific errors"
+    echo "4. Verify UI components exist: ls -la components/ui/"
     exit 1
 fi

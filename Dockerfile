@@ -11,10 +11,13 @@ RUN apk add --no-cache libc6-compat
 COPY package.json ./
 
 # Install dependencies with legacy peer deps to resolve conflicts
-RUN npm install --legacy-peer-deps --omit=dev
+RUN npm install --legacy-peer-deps
 
-# Copy source code
+# Copy ALL source code (including components/ui)
 COPY . .
+
+# Verify components exist before build
+RUN ls -la components/ && ls -la components/ui/ || echo "Components check"
 
 # Build the application
 RUN npm run build

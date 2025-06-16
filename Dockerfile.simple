@@ -3,14 +3,17 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package.json
+# Copy package.json first
 COPY package.json ./
 
 # Install ALL dependencies (including dev) to avoid conflicts
 RUN npm install --legacy-peer-deps
 
-# Copy all source code
+# Copy ALL source files (this ensures UI components are included)
 COPY . .
+
+# Verify UI components exist
+RUN ls -la components/ui/ || echo "UI components directory not found"
 
 # Build the app
 RUN npm run build
