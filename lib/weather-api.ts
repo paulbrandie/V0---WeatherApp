@@ -26,56 +26,80 @@ export interface WeatherData {
   }>
 }
 
-const API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY || "MyCloudyApp"
+const API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY
 const BASE_URL = "https://api.openweathermap.org/data/2.5"
 
-export async function fetchWeatherData(city = "Aberdeen"): Promise<WeatherData> {
-  // Check if API key exists and is not the demo key
-  if (!API_KEY || API_KEY === "demo_key") {
-    console.warn("No OpenWeatherMap API key provided, using fallback data")
+export async function fetchWeatherData(city = "London"): Promise<WeatherData> {
+  // Debug API key status
+  console.log("=== API Key Debug Info ===")
+  console.log("API Key exists:", !!API_KEY)
+  console.log("API Key length:", API_KEY?.length || 0)
+  console.log("API Key first 8 chars:", API_KEY?.substring(0, 8) || "none")
+  console.log("API Key last 4 chars:", API_KEY?.substring(API_KEY.length - 4) || "none")
+
+  // Check if API key exists and is not obviously invalid
+  if (!API_KEY || API_KEY.length < 10 || API_KEY === "your_api_key_here" || API_KEY === "demo_key") {
+    console.warn("❌ Invalid or missing API key, using fallback data")
+    console.warn("Expected: 32-character alphanumeric string")
+    console.warn("Got:", API_KEY || "undefined")
     return getFallbackWeatherData(city)
   }
 
-  // Log API key status (first 8 characters only for security)
-  console.log("Using API key:", API_KEY.substring(0, 8) + "...")
-
   try {
-    // Fetch current weather
-    const currentUrl = `${BASE_URL}/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`
-    console.log("Fetching weather from:", currentUrl.replace(API_KEY, "***"))
+    // Test API key first with a simple request
+    const testUrl = `${BASE_URL}/weather?q=London&appid=${API_KEY}&units=metric`
+    console.log("🔍 Testing API key with:", testUrl.replace(API_KEY, "***"))
 
+    const testResponse = await fetch(testUrl)
+
+    if (!testResponse.ok) {
+      const errorText = await testResponse.text()
+      console.error("❌ API Key Test Failed:")
+      console.error("Status:", testResponse.status)
+      console.error("Response:", errorText)
+
+      if (testResponse.status === 401) {
+        console.error("🔑 API Key is invalid or not activated")
+        console.error("1. Check your API key is correct")
+        console.error("2. Wait up to 2 hours for new keys to activate")
+        console.error("3. Verify your OpenWeatherMap account is confirmed")
+      }
+
+      return getFallbackWeatherData(city)
+    }
+
+    console.log("✅ API key test successful, fetching weather for:", city)
+
+    // Fetch current weather for the requested city
+    const currentUrl = `${BASE_URL}/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`
     const currentResponse = await fetch(currentUrl)
 
     if (!currentResponse.ok) {
       const errorText = await currentResponse.text()
-      console.error("Weather API Response:", {
+      console.error("Weather API Error:", {
         status: currentResponse.status,
         statusText: currentResponse.statusText,
         body: errorText,
+        city: city,
       })
 
-      // Handle specific error codes
-      if (currentResponse.status === 401) {
-        console.error("API Key Error: Invalid or missing API key")
-        throw new Error("Invalid API key. Please check your NEXT_PUBLIC_OPENWEATHER_API_KEY")
-      } else if (currentResponse.status === 404) {
-        console.error("City not found:", city)
-        throw new Error(`City "${city}" not found`)
-      } else {
-        throw new Error(`Weather API error: ${currentResponse.status} - ${currentResponse.statusText}`)
+      if (currentResponse.status === 404) {
+        console.error(`City "${city}" not found, using fallback data`)
       }
+
+      return getFallbackWeatherData(city)
     }
 
     const currentData = await currentResponse.json()
-    console.log("Successfully fetched weather data for:", currentData.name)
+    console.log("✅ Successfully fetched current weather for:", currentData.name)
 
-    // Fetch hourly forecast (5-day/3-hour forecast)
+    // Fetch forecast data
     const forecastUrl = `${BASE_URL}/forecast?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`
     const forecastResponse = await fetch(forecastUrl)
 
     if (!forecastResponse.ok) {
       console.error("Forecast API error:", forecastResponse.status)
-      // If current weather worked but forecast failed, use current data with fallback forecast
+      // Use current data with fallback forecast
       const fallbackData = getFallbackWeatherData(city)
       return {
         current: {
@@ -101,13 +125,13 @@ export async function fetchWeatherData(city = "Aberdeen"): Promise<WeatherData> 
     const hourlyForecasts = processHourlyData(forecastData.list.slice(0, 6))
     const dailyForecasts = processDailyData(forecastData.list)
 
-    return {
+    const result = {
       current: {
         temperature: Math.round(currentData.main.temp),
         condition: mapWeatherCondition(currentData.weather[0].main),
         description: currentData.weather[0].description,
         humidity: currentData.main.humidity,
-        windSpeed: Math.round(currentData.wind.speed * 2.237), // Convert m/s to mph
+        windSpeed: Math.round(currentData.wind.speed * 2.237),
         feelsLike: Math.round(currentData.main.feels_like),
       },
       location: {
@@ -117,8 +141,11 @@ export async function fetchWeatherData(city = "Aberdeen"): Promise<WeatherData> 
       hourly: hourlyForecasts,
       daily: dailyForecasts,
     }
+
+    console.log("✅ Successfully processed all weather data")
+    return result
   } catch (error) {
-    console.error("Error fetching weather data:", error)
+    console.error("❌ Error fetching weather data:", error)
     return getFallbackWeatherData(city)
   }
 }
@@ -181,28 +208,33 @@ function mapWeatherCondition(condition: string): string {
 }
 
 function getFallbackWeatherData(city = "London"): WeatherData {
+  console.log("📋 Using fallback weather data for:", city)
+
   const cityData = {
-    London: { temp: 20, country: "GB" },
-    Manchester: { temp: 18, country: "GB" },
-    Birmingham: { temp: 19, country: "GB" },
-    Edinburgh: { temp: 16, country: "GB" },
-    Cardiff: { temp: 21, country: "GB" },
-    Bristol: { temp: 20, country: "GB" },
-    Liverpool: { temp: 18, country: "GB" },
-    Glasgow: { temp: 15, country: "GB" },
+    London: { temp: 15, country: "GB" },
+    Manchester: { temp: 13, country: "GB" },
+    Birmingham: { temp: 14, country: "GB" },
+    Edinburgh: { temp: 11, country: "GB" },
+    Cardiff: { temp: 16, country: "GB" },
+    Bristol: { temp: 15, country: "GB" },
+    Liverpool: { temp: 13, country: "GB" },
+    Glasgow: { temp: 10, country: "GB" },
     Multan: { temp: 32, country: "PK" },
+    "New York": { temp: 18, country: "US" },
+    Paris: { temp: 16, country: "FR" },
+    Tokyo: { temp: 22, country: "JP" },
   }
 
-  const defaultData = cityData[city as keyof typeof cityData] || cityData.London
+  const defaultData = cityData[city as keyof typeof cityData] || { temp: 15, country: "GB" }
 
   return {
     current: {
       temperature: defaultData.temp,
       condition: "Cloudy",
       description: "Partly cloudy",
-      humidity: 90,
-      windSpeed: 6,
-      feelsLike: defaultData.temp - 1,
+      humidity: 65,
+      windSpeed: 8,
+      feelsLike: defaultData.temp - 2,
     },
     location: {
       name: city,
@@ -210,19 +242,19 @@ function getFallbackWeatherData(city = "London"): WeatherData {
     },
     hourly: [
       { time: "1 PM", temperature: defaultData.temp, condition: "Cloudy", description: "Cloudy" },
-      { time: "2 PM", temperature: defaultData.temp + 1, condition: "Rainy", description: "Rainy" },
-      { time: "3 PM", temperature: defaultData.temp + 1, condition: "Rainy", description: "Rainy" },
-      { time: "4 PM", temperature: defaultData.temp, condition: "Cloudy", description: "Cloudy" },
-      { time: "5 PM", temperature: defaultData.temp + 1, condition: "Rainy", description: "Rainy" },
-      { time: "6 PM", temperature: defaultData.temp + 1, condition: "Rainy", description: "Rainy" },
+      { time: "2 PM", temperature: defaultData.temp + 1, condition: "Sunny", description: "Sunny" },
+      { time: "3 PM", temperature: defaultData.temp + 2, condition: "Sunny", description: "Sunny" },
+      { time: "4 PM", temperature: defaultData.temp + 1, condition: "Cloudy", description: "Cloudy" },
+      { time: "5 PM", temperature: defaultData.temp, condition: "Cloudy", description: "Cloudy" },
+      { time: "6 PM", temperature: defaultData.temp - 1, condition: "Cloudy", description: "Cloudy" },
     ],
     daily: [
-      { day: "Today", temperature: defaultData.temp, condition: "Mist", description: "Mist" },
-      { day: "Tue", temperature: defaultData.temp + 12, condition: "Sunny", description: "Sunny" },
-      { day: "Wed", temperature: defaultData.temp - 8, condition: "Rainy", description: "Rainy" },
-      { day: "Thu", temperature: defaultData.temp - 7, condition: "Rainy", description: "Rainy" },
-      { day: "Fri", temperature: defaultData.temp + 2, condition: "Mist", description: "Mist" },
-      { day: "Sat", temperature: defaultData.temp + 2, condition: "Mist", description: "Mist" },
+      { day: "Today", temperature: defaultData.temp, condition: "Cloudy", description: "Cloudy" },
+      { day: "Tue", temperature: defaultData.temp + 3, condition: "Sunny", description: "Sunny" },
+      { day: "Wed", temperature: defaultData.temp - 2, condition: "Rainy", description: "Rainy" },
+      { day: "Thu", temperature: defaultData.temp + 1, condition: "Cloudy", description: "Cloudy" },
+      { day: "Fri", temperature: defaultData.temp + 2, condition: "Sunny", description: "Sunny" },
+      { day: "Sat", temperature: defaultData.temp, condition: "Cloudy", description: "Cloudy" },
     ],
   }
 }
