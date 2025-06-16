@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Wind, Droplets, RefreshCw } from "lucide-react"
+import { Wind, Droplets, RefreshCw, Server } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { fetchWeatherData, type WeatherData } from "./lib/weather-api"
+import type { WeatherData } from "./lib/weather-api"
 import { LocationSettings } from "./components/location-settings"
 import { ApiSetupNotice } from "./components/api-setup-notice"
 
@@ -13,6 +13,7 @@ export default function WeatherApp() {
   const [selectedLocation, setSelectedLocation] = useState("London")
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [isServerCached, setIsServerCached] = useState(false)
 
   // Load saved location from localStorage on mount
   useEffect(() => {
@@ -27,27 +28,44 @@ export default function WeatherApp() {
     localStorage.setItem("weather-location", selectedLocation)
     loadWeatherData(selectedLocation)
 
-    // Set up automatic refresh every 3 minutes (180,000 milliseconds)
+    // Set up client-side refresh every 30 seconds to check for server updates
     const interval = setInterval(() => {
       loadWeatherData(selectedLocation)
-    }, 180000) // 3 minutes = 180,000 milliseconds
+    }, 30000) // Check every 30 seconds for server updates
 
-    // Cleanup interval on component unmount or location change
     return () => clearInterval(interval)
   }, [selectedLocation])
 
   const loadWeatherData = async (city: string) => {
     setLoading(true)
     try {
+      // Try to fetch from server-side cache first
+      const response = await fetch(`/api/weather?city=${encodeURIComponent(city)}`)
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setWeatherData(result.data)
+          setLastUpdated(new Date(result.timestamp))
+          setIsServerCached(result.cached)
+          return
+        }
+      }
+
+      // Fallback to client-side fetch if server fails
+      const { fetchWeatherData } = await import("./lib/weather-api")
       const data = await fetchWeatherData(city)
       setWeatherData(data)
       setLastUpdated(new Date())
+      setIsServerCached(false)
     } catch (error) {
       console.error("Weather data error:", error)
-      // Still try to get fallback data
+      // Final fallback
+      const { fetchWeatherData } = await import("./lib/weather-api")
       const fallbackData = await fetchWeatherData(city)
       setWeatherData(fallbackData)
       setLastUpdated(new Date())
+      setIsServerCached(false)
     } finally {
       setLoading(false)
     }
@@ -122,14 +140,18 @@ export default function WeatherApp() {
             <p className="text-2xl font-medium text-gray-800 mb-1">{getGreeting()}</p>
             <p className="text-gray-600">{getCurrentTime()}</p>
             {lastUpdated && (
-              <p className="text-xs text-gray-500 mt-1">
-                Updated:{" "}
-                {lastUpdated.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  hour12: true,
-                })}
-              </p>
+              <div className="text-xs text-gray-500 mt-1">
+                <p className="flex items-center justify-end gap-1">
+                  {isServerCached && <Server className="w-3 h-3" />}
+                  Updated:{" "}
+                  {lastUpdated.toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </p>
+                {isServerCached && <p className="text-green-600">Auto-updating every 3 min</p>}
+              </div>
             )}
           </div>
         </div>
